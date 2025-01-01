@@ -94,6 +94,52 @@ def generate_prediction_scores(masker,model, test_dataloader, args):
     return pd.concat(ls,ignore_index=True)
 
 
+def back_test(output,output_index,dataset,number):
+    output["tradable"] = True
+
+    output.index = output_index
+    output = pd.merge(dataset,output,left_index=True,right_index=True)
+    ## Backtest for China Stock
+    # output["tradable"] = ~ ((output["open"] == output["high"]) &  (output["open"] == output["low"]) & (output["open"] == output["close"]))
+    # output["tradable"] = output["tradable"].groupby("instrument").shift(-1)
+    
+    asset = 1
+    optimal_asset = 1
+    bench_cum = 1
+    history = [1]
+    optimal_hist = [1]
+    bench_hist = [1]
+    new_potofolio = potofolio =  new_optimal_potofolio = optimal_potofolio = []
+    df_trade_list = []
+    profit_list = []
+    for date, df in output.groupby("datetime"):
+        trade_df =  df.loc[df.tradable].sort_values(by="pred",ascending=False).head(number)
+        new_potofolio = trade_df.index.get_level_values("instrument")
+        if len(potofolio)==0:
+            fee = 0
+        else:
+            fee = len(set(new_potofolio) - set(potofolio))/len(potofolio) * 0.0015
+        profit = trade_df["label"].mean()
+        profit_list.append(profit-fee)
+        # fee = 0   
+        df_trade_list.append(trade_df)
+        bench = df["label"].mean()
+        pre_asset = asset
+        asset *=(1+profit-fee)
+        potofolio = new_potofolio
+        history.append(asset)
+        optimal_hist.append(optimal_asset)
+        pre_bench_cum = bench_cum
+        bench_cum *=(1+bench)
+        bench_hist.append(bench_cum)
+    df_history = pd.DataFrame(history[1:],index=all.index.get_level_values("datetime").unique())
+    df_history.rename(columns={0:"Cumulative_Returns"},inplace=True)
+    df_history['Drawdown'] = df_history['Cumulative_Returns'].div(df_history['Cumulative_Returns'].cummax()) - 1
+    df_history["return_rate"] = profit_list
+    df_history['Drawdown'].min()
+
+    return df_history
+
 @dataclass
 class test_args:
     run_name: str

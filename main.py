@@ -9,7 +9,7 @@ import argparse
 from Layers import FeatureReconstructor, Predictor,FeatureMask, FeatureExtractor, FactorDecoder, FactorEncoder, FatorPrior, AlphaLayer, BetaLayer
 from dataset import StockDataset,DynamicBatchSampler
 from train_model import train, validate
-from utils import set_seed, DataArgument,generate_prediction_scores
+from utils import back_test, set_seed, DataArgument,generate_prediction_scores
 import wandb
 
 parser = argparse.ArgumentParser(description='Train a predictor model on stock data')
@@ -47,6 +47,7 @@ data_args = DataArgument(use_qlib=False, normalize=True, select_feature=False)
 args.save_dir = args.save_dir+"/"+str(args.factor_dim)
         
 dataset = pd.read_pickle(f"{data_args.save_dir}/usdataset_norm.pkl")
+df_all = pd.read_pickle(f"{data_args.save_dir}/usdataset.pkl")
 
 
 
@@ -180,6 +181,9 @@ def main(args):
     output["label"] = dataset.loc[output.index,'label']
     print("Test Result:")
     rankic(output)
+    backtest_results = back_test(output,dataset.index[test_index[:,-1]],dataset,number=10)
+    backtest_results.to_csv("backtest.result.csv")
+    
     
     if args.wandb:
         wandb.log({"Best Validation RankIC": best_rankic})
